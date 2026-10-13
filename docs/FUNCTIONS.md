@@ -1,7 +1,9 @@
 # Cloud Functions reference
 
-All 42 functions are **Firebase callable functions (v2)** in `us-central1`. Call them
-from FlutterFlow with a Cloud Function action / `FirebaseFunctions.instance.httpsCallable(name)`.
+All 42 functions are **Firebase callable functions (v2)** in `asia-south1` (Mumbai). Call them
+from FlutterFlow with a Cloud Function action, or in Flutter with
+`FirebaseFunctions.instanceFor(region: 'asia-south1').httpsCallable(name)`.
+The region must be set on the client; the default instance calls us-central1.
 
 Common to every function:
 

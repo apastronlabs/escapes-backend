@@ -11,13 +11,13 @@ test("every exported callable maps to a handler and vice versa", () => {
   assert.deepEqual([...CALLABLES].sort(), Object.keys(handlers).sort());
 });
 
-test("index exports authenticated v2 callables in us-central1 and no HTTP endpoints", () => {
+test("index exports authenticated v2 callables in asia-south1 and no HTTP endpoints", () => {
   const exported = require("../../index.js");
   for (const name of CALLABLES) {
     const fn = exported[name];
     assert.equal(typeof fn, "function", name);
     assert.ok(fn.__endpoint.callableTrigger, `${name} is a callable`);
-    assert.deepEqual(fn.__endpoint.region, ["us-central1"]);
+    assert.deepEqual(fn.__endpoint.region, ["asia-south1"]);
     assert.equal(fn.__endpoint.platform, "gcfv2");
   }
   assert.equal(Object.keys(exported).length, CALLABLES.length);

@@ -3,7 +3,7 @@
 /** Bump when a document shape changes incompatibly. Stored on every document. */
 const SCHEMA_VERSION = 1;
 
-const REGION = "us-central1";
+const REGION = "asia-south1";
 
 const COLLECTIONS = Object.freeze({
   USERS: "users",

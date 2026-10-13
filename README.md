@@ -2,7 +2,7 @@
 
 Firebase backend for Scaper, a multi-trip group expense app (FlutterFlow, Android + iOS)
 with UPI Intent payments. Cloud Functions v2 · Node.js 22 · JavaScript · Firestore ·
-Firebase Auth · `us-central1`.
+Firebase Auth · `asia-south1`.
 
 * Users create any number of independent trips, each with its own members, categories,
   expenses, payments, settlements and audit trail. Every record carries `tripId`, and every
@@ -24,7 +24,7 @@ firebase.json              functions codebase "scaper" + emulator ports (no rule
 firestore.indexes.json     composite indexes
 .firebaserc.example        put your existing project id here (copy to .firebaserc)
 functions/
-  index.js                 exports 42 callables (onCall v2, us-central1)
+  index.js                 exports 42 callables (onCall v2, asia-south1)
   src/callables.js         list of exported function names
   src/config.js            deploy params (VERIFICATION_PROVIDER, UPI_MAX_AMOUNT_MINOR, ...)
   src/context.js           dependency wiring (Firestore, Storage, verification adapter)
