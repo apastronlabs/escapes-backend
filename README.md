@@ -78,6 +78,9 @@ Auth/Firestore/Storage calls).
    firebase deploy --only firestore:indexes   # merge with FlutterFlow-managed indexes first, see docs/SCHEMA.md
    ```
 5. One-time, optional: TTL policy on `idempotencyKeys.expireAt` (command in docs/SCHEMA.md).
+   Also one-time: a clean-up policy so old function container images don't accumulate
+   Artifact Registry storage charges (keeps images 1 day; running functions are unaffected):
+   `firebase functions:artifacts:setpolicy --location asia-south1 --days 1 --force`
 6. Receipts: the app uploads to `receipts/{tripId}/{uid}/{file}` in the default bucket.
    `getReceiptUrl` signs URLs, which needs the functions' service account to have
    `iam.serviceAccounts.signBlob` (Service Account Token Creator on itself).
