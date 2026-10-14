@@ -45,12 +45,12 @@ function makeTripService(ctx) {
     const name = v.string(data, "name", { max: LIMITS.MAX_TITLE_LENGTH });
     const description = v.string(data, "description", { required: false, max: LIMITS.MAX_NOTE_LENGTH });
     const currency = v.oneOf(data, "currency", Object.keys(SUPPORTED_CURRENCIES), { required: false, defaultValue: "INR" });
-    const startDate = v.isoDate(data, "startDate");
-    const endDate = v.isoDate(data, "endDate");
-    if (startDate && endDate && endDate < startDate) throw invalid("endDate is before startDate.", "INVALID_DATE_RANGE");
+    const startMs = v.timestampMillis(data, "startDate");
+    const endMs = v.timestampMillis(data, "endDate");
+    if (startMs !== null && endMs !== null && endMs < startMs) throw invalid("endDate is before startDate.", "INVALID_DATE_RANGE");
     const key = v.idempotencyKey(data);
 
-    return runIdempotent(ctx, { uid, operation: "createTrip", key, payload: { name, description, currency, startDate, endDate } }, async (tx) => {
+    return runIdempotent(ctx, { uid, operation: "createTrip", key, payload: { name, description, currency, startMs, endMs } }, async (tx) => {
       const displayName = await displayNameFor(ctx, tx, uid, request.auth.token);
       const tripRef = db.collection(COLLECTIONS.TRIPS).doc();
       const tripId = tripRef.id;
@@ -59,8 +59,8 @@ function makeTripService(ctx) {
         name,
         description,
         currency,
-        startDate,
-        endDate,
+        startDate: startMs === null ? null : ctx.Timestamp.fromMillis(startMs),
+        endDate: endMs === null ? null : ctx.Timestamp.fromMillis(endMs),
         ownerUid: uid,
         createdByUid: uid,
         status: "ACTIVE",
@@ -98,8 +98,11 @@ function makeTripService(ctx) {
     const updates = {};
     if (data.name !== undefined) updates.name = v.string(data, "name", { max: LIMITS.MAX_TITLE_LENGTH });
     if (data.description !== undefined) updates.description = v.string(data, "description", { required: false, max: LIMITS.MAX_NOTE_LENGTH });
-    if (data.startDate !== undefined) updates.startDate = v.isoDate(data, "startDate");
-    if (data.endDate !== undefined) updates.endDate = v.isoDate(data, "endDate");
+    for (const field of ["startDate", "endDate"]) {
+      if (data[field] === undefined) continue;
+      const ms = v.timestampMillis(data, field);
+      updates[field] = ms === null ? null : ctx.Timestamp.fromMillis(ms);
+    }
     if (data.status !== undefined) updates.status = v.oneOf(data, "status", ["ACTIVE", "ARCHIVED"]);
     const expectedVersion = v.integer(data, "expectedVersion", { required: false, min: 1 });
     if (!Object.keys(updates).length) throw invalid("Nothing to update.", "NO_CHANGES");
@@ -113,7 +116,8 @@ function makeTripService(ctx) {
         throw precondition("The trip was changed by someone else. Reload and try again.", "VERSION_CONFLICT");
       }
       const next = { ...trip, ...updates };
-      if (next.startDate && next.endDate && next.endDate < next.startDate) {
+      const toMs = (d) => (d && typeof d.toMillis === "function" ? d.toMillis() : Date.parse(d)); // older docs stored "YYYY-MM-DD"
+      if (next.startDate && next.endDate && toMs(next.endDate) < toMs(next.startDate)) {
         throw invalid("endDate is before startDate.", "INVALID_DATE_RANGE");
       }
       const changes = diff(trip, next, Object.keys(updates));

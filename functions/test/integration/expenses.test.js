@@ -144,3 +144,20 @@ test("summary separates confirmed and provisional balances; removed members keep
   assert.equal(s.confirmed.balances.find((x) => x.uid === "b").netMinor, 0);
   assert.deepEqual(s.confirmed.suggestions, [{ fromUid: "c", toUid: "a", amountMinor: 300000 }]);
 });
+
+test("expenseDate is a timestamp: epoch ms or ISO string, defaulting to when it was recorded", async () => {
+  const { h } = setup();
+  const tripId = await tripWith(h, "a", ["b"]);
+  const when = Date.UTC(2026, 9, 14, 19, 15, 31);
+  const r1 = await h.createExpense(as("a", { tripId, title: "Lunch", amountMinor: 1000, participantUids: ["a", "b"], expenseDate: when, idempotencyKey: key() }));
+  assert.equal((await getDoc("expenses", r1.expenseId)).expenseDate.toMillis(), when);
+  const r2 = await h.createExpense(as("a", { tripId, title: "Dinner", amountMinor: 1000, participantUids: ["a", "b"], expenseDate: "2026-10-14T19:15:31+05:30", idempotencyKey: key() }));
+  assert.equal((await h.getExpense(as("a", { tripId, expenseId: r2.expenseId }))).expense.expenseDate, "2026-10-14T13:45:31.000Z");
+  const before = Date.now();
+  const r3 = await h.createExpense(as("a", { tripId, title: "Tea", amountMinor: 1000, participantUids: ["a", "b"], idempotencyKey: key() }));
+  assert.ok((await getDoc("expenses", r3.expenseId)).expenseDate.toMillis() >= before - 1000);
+  await h.updateExpense(as("a", { tripId, expenseId: r3.expenseId, expectedVersion: 1, expenseDate: when }));
+  assert.equal((await getDoc("expenses", r3.expenseId)).expenseDate.toMillis(), when);
+  await rejectsWith(h.createExpense(as("a", { tripId, title: "Bad", amountMinor: 1000, participantUids: ["a"], expenseDate: 1791978951, idempotencyKey: key() })), "invalid-argument", "INVALID_FIELD");
+  await rejectsWith(h.createExpense(as("a", { tripId, title: "Bad", amountMinor: 1000, participantUids: ["a"], expenseDate: "14/10/2026", idempotencyKey: key() })), "invalid-argument", "INVALID_FIELD");
+});

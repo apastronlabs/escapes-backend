@@ -14,10 +14,13 @@ test("unauthenticated calls are rejected", async () => {
 
 test("createTrip seeds owner membership and trip-scoped default categories", async () => {
   const { h } = setup();
-  const { tripId } = await h.createTrip(as("alice", { name: "Goa 2026", startDate: "2026-12-20", endDate: "2026-12-27", idempotencyKey: key() }));
+  const { tripId } = await h.createTrip(as("alice", { name: "Goa 2026", startDate: "2026-12-20T00:00:00Z", endDate: Date.UTC(2026, 11, 27), idempotencyKey: key() }));
   const trip = await getDoc("trips", tripId);
   assert.equal(trip.ownerUid, "alice");
   assert.equal(trip.currency, "INR");
+  assert.equal(trip.startDate.toMillis(), Date.UTC(2026, 11, 20));
+  assert.equal(trip.endDate.toMillis(), Date.UTC(2026, 11, 27));
+  assert.equal((await h.getTrip(as("alice", { tripId }))).trip.endDate, "2026-12-27T00:00:00.000Z");
   assert.equal((await getDoc("tripMemberships", `${tripId}_alice`)).role, "OWNER");
   const { categories } = await h.listCategories(as("alice", { tripId }));
   assert.deepEqual(categories.map((c) => c.name), ["Food", "Drinks", "Transport", "Accommodation", "Activities", "Shopping", "Groceries", "Other"]);

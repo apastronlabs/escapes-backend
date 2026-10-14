@@ -93,7 +93,7 @@ function parseExpenseInput(data, { requireAmount }) {
   const participantUids = v.idArray(data, "participantUids", { max: LIMITS.MAX_PARTICIPANTS_PER_EXPENSE });
   const split = data.split === undefined ? { type: SPLIT_TYPES.EQUAL, values: null } : parseSplit(data.split);
   const notes = v.string(data, "notes", { required: false, max: LIMITS.MAX_NOTE_LENGTH });
-  const expenseDate = v.isoDate(data, "expenseDate");
+  const expenseDate = v.timestampMillis(data, "expenseDate");
   const receiptIds = data.receiptIds === undefined ? [] : v.idArray(data, "receiptIds", { min: 0, max: 10 });
   return { title, merchantName, amountMinor, currency, categoryId, paidByUid, participantUids, split, notes, expenseDate, receiptIds };
 }
@@ -170,7 +170,8 @@ function commitExpenseCreate(ctx, tx, plan, { expenseRef, kind = EXPENSE_KINDS.S
     shares: plan.shares,
     notes: plan.input.notes || null,
     receiptIds: plan.input.receiptIds || [],
-    expenseDate: plan.input.expenseDate || null,
+    // When the expense happened; defaults to when it was recorded.
+    expenseDate: ctx.Timestamp.fromMillis(plan.input.expenseDate ?? ctx.now()),
     transactionId,
     adjustsExpenseId,
     verificationStatus: plan.verificationStatus,
@@ -293,7 +294,10 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
     if (data.merchantName !== undefined) updates.merchantName = v.string(data, "merchantName", { required: false, max: 100 });
     if (data.categoryId !== undefined) updates.categoryId = v.id(data, "categoryId");
     if (data.notes !== undefined) updates.notes = v.string(data, "notes", { required: false, max: LIMITS.MAX_NOTE_LENGTH });
-    if (data.expenseDate !== undefined) updates.expenseDate = v.isoDate(data, "expenseDate");
+    if (data.expenseDate !== undefined) {
+      const ms = v.timestampMillis(data, "expenseDate", { required: true });
+      updates.expenseDate = ctx.Timestamp.fromMillis(ms);
+    }
     if (data.receiptIds !== undefined) updates.receiptIds = v.idArray(data, "receiptIds", { min: 0, max: 10 });
     const newParticipants = data.participantUids !== undefined ? v.idArray(data, "participantUids", { max: LIMITS.MAX_PARTICIPANTS_PER_EXPENSE }) : null;
     const newSplit = data.split !== undefined ? parseSplit(data.split) : null;

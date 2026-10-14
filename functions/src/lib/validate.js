@@ -98,6 +98,41 @@ function isoDate(data, field, { required = false } = {}) {
   return v;
 }
 
+// Accepted timestamp range: 2000-01-01 to 2100-01-01 (catches seconds-vs-milliseconds mix-ups).
+const MIN_TIMESTAMP_MS = Date.UTC(2000, 0, 1);
+const MAX_TIMESTAMP_MS = Date.UTC(2100, 0, 1);
+const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
+ * A point in time, returned as epoch milliseconds. Accepts epoch milliseconds, an ISO-8601
+ * string ("2026-10-14T19:15:31.000Z"; no offset = UTC; a date alone = midnight UTC), or a
+ * Firestore-style map ({seconds, nanoseconds} or {_seconds, _nanoseconds}).
+ */
+function timestampMillis(data, field, { required = false } = {}) {
+  const raw = data[field];
+  if (raw === undefined || raw === null || raw === "") {
+    if (required) throw invalid(`${field} is required.`, "MISSING_FIELD", { field });
+    return null;
+  }
+  let ms = NaN;
+  if (typeof raw === "number") {
+    ms = Number.isSafeInteger(raw) ? raw : NaN;
+  } else if (typeof raw === "string" && ISO_DATETIME_RE.test(raw.trim())) {
+    let s = raw.trim().replace(" ", "T");
+    if (s.length === 10) s += "T00:00:00Z";
+    else if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += "Z";
+    ms = Date.parse(s);
+  } else if (isPlainObject(raw)) {
+    const sec = raw.seconds ?? raw._seconds;
+    const nanos = raw.nanoseconds ?? raw._nanoseconds ?? 0;
+    if (Number.isSafeInteger(sec) && Number.isSafeInteger(nanos)) ms = sec * 1000 + Math.floor(nanos / 1e6);
+  }
+  if (!Number.isFinite(ms) || ms < MIN_TIMESTAMP_MS || ms > MAX_TIMESTAMP_MS) {
+    throw invalid(`${field} must be a timestamp (epoch milliseconds or ISO-8601 string).`, "INVALID_FIELD", { field });
+  }
+  return ms;
+}
+
 /** Client-generated idempotency key (UUID or similar). */
 function idempotencyKey(data) {
   return string(data, "idempotencyKey", { min: 8, max: 128, pattern: /^[A-Za-z0-9_.:-]+$/ });
@@ -126,6 +161,7 @@ module.exports = {
   oneOf,
   idArray,
   isoDate,
+  timestampMillis,
   idempotencyKey,
   pageSize,
   onlyKeys,

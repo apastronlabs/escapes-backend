@@ -18,7 +18,10 @@ Common to every function:
   `already-exists / IDEMPOTENCY_KEY_REUSED`.
 * **Errors**: `HttpsError` with `details.reason` (stable machine-readable code).
 * **Archived trips** are read-only (`TRIP_ARCHIVED`) except for reads, restoring, and member exits.
-* Amounts are integer paise (`*Minor`). Timestamps in responses are ISO-8601 strings.
+* Amounts are integer paise (`*Minor`). Timestamps in responses are ISO-8601 strings (UTC).
+* Date inputs (`startDate`, `endDate`, `expenseDate`) are timestamps: epoch milliseconds or an ISO-8601 string
+  (`"2026-10-14T19:15:31+05:30"`; no offset means UTC). They are stored as Firestore Timestamps.
+  `expenseDate` defaults to the time the expense is recorded.
 
 Roles: **O** = OWNER, **A** = ADMIN, **M** = MEMBER.
 

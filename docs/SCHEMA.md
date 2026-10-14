@@ -35,7 +35,7 @@ Money: integer paise in `*Minor` fields. Currency: `INR` (trip-level).
 
 ## Documents
 
-**trips**: `tripId, name, description, currency, startDate, endDate (YYYY-MM-DD), ownerUid, createdByUid, status (ACTIVE|ARCHIVED), memberCount, version`
+**trips**: `tripId, name, description, currency, startDate, endDate (Timestamp | null), ownerUid, createdByUid, status (ACTIVE|ARCHIVED), memberCount, version`
 
 **tripMemberships**: `membershipId, tripId, uid, role (OWNER|ADMIN|MEMBER), status (ACTIVE|REMOVED|LEFT), displayName, joinedVia (CREATOR|INVITATION), invitationId?, joinedAt, removedByUid?, removedAt?, previousStatus?`
 
@@ -71,7 +71,7 @@ version, initiatedAt
 expenseId, tripId, kind (STANDARD|REFUND_ADJUSTMENT|REVERSAL_ADJUSTMENT), title, merchantName,
 amountMinor (negative for adjustments), currency, categoryId, categorySource (MANUAL|RULE_MCC|RULE_KEYWORD|DEFAULT),
 paidByUid, createdByUid, participantUids[] (sorted), split { type, values }, shares { uid: paise },
-notes, receiptIds[], expenseDate, transactionId, adjustsExpenseId,
+notes, receiptIds[], expenseDate (Timestamp; defaults to creation time), transactionId, adjustsExpenseId,
 verificationStatus (transaction states | MEMBER_REPORTED), verificationSource, reviewedByUid?, reviewNote?,
 status (ACTIVE|VOIDED), voidReason?, voidedByUid?, version
 ```

@@ -37,6 +37,14 @@ Part 3 is the full reference of all 42 functions.
   100 for display. Never send decimals.
 * Percentages in splits are **basis points**: 1% = `100`, and the total must be `10000`.
 
+### Dates
+
+* Every date field (`startDate`, `endDate`, `expenseDate`) is a **timestamp**. Send the DateTime as
+  epoch milliseconds (`dateTime.millisecondsSinceEpoch`) or as an ISO-8601 string
+  (`dateTime.toUtc().toIso8601String()`). They are stored as Firestore Timestamps.
+* Omit `expenseDate` to use the time the expense is recorded.
+* Responses return dates as ISO-8601 strings in UTC; parse with `DateTime.parse(...).toLocal()`.
+
 ### Idempotency keys (functions marked 🔁)
 
 * These functions need an `idempotencyKey` string of 8-128 characters.
@@ -142,7 +150,7 @@ Expenses without a UPI payment (cash or card) show `verificationStatus: MEMBER_R
   for the next page. Optional `categoryId` filter.
 * **Expense detail:** `getExpense`.
 * **Add expense (on Save):** `createExpense` 🔁 with `title`, `amountMinor`, `participantUids`, and optionally
-  `split`, `paidByUid` (admins only, for someone else), `categoryId`, `notes`, `expenseDate`, `receiptIds`.
+  `split`, `paidByUid` (admins only, for someone else), `categoryId`, `notes`, `expenseDate` (a timestamp; omit it to use "now"), `receiptIds`.
   * Equal split: omit `split`.
   * Exact amounts: `split: {type: "AMOUNT", values: {uid1: 30000, uid2: 20000}}`. The values must add up to `amountMinor`.
   * Percentages: `split: {type: "PERCENTAGE", values: {uid1: 6000, uid2: 4000}}`. The values must add up to 10000.
@@ -244,7 +252,10 @@ Common to every function:
   `already-exists / IDEMPOTENCY_KEY_REUSED`.
 * **Errors**: `HttpsError` with `details.reason` (stable machine-readable code).
 * **Archived trips** are read-only (`TRIP_ARCHIVED`) except for reads, restoring, and member exits.
-* Amounts are integer paise (`*Minor`). Timestamps in responses are ISO-8601 strings.
+* Amounts are integer paise (`*Minor`). Timestamps in responses are ISO-8601 strings (UTC).
+* Date inputs (`startDate`, `endDate`, `expenseDate`) are timestamps: epoch milliseconds or an ISO-8601 string
+  (`"2026-10-14T19:15:31+05:30"`; no offset means UTC). They are stored as Firestore Timestamps.
+  `expenseDate` defaults to the time the expense is recorded.
 
 Roles: **O** = OWNER, **A** = ADMIN, **M** = MEMBER.
 
