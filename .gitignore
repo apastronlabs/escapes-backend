@@ -1,0 +1,7 @@
+node_modules/
+.firebaserc
+*.log
+functions/.env.*
+!functions/.env.example
+functions/.runtimeconfig.json
+.DS_Store
