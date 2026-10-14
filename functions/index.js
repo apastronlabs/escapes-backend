@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Scaper backend: Cloud Functions v2 entry point.
+ * Escapes backend: Cloud Functions v2 entry point.
  *
  * Every exported function is an authenticated callable (onCall). There are no
  * HTTP endpoints: no payment provider webhook is integrated (see docs/VERIFICATION.md).

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # End-to-end smoke test through the real callable HTTP path with the Auth emulator.
 # Run from the repo root:
-#   npx --prefix functions firebase emulators:exec --project demo-scaper \
+#   npx --prefix functions firebase emulators:exec --project demo-escapes \
 #     --only functions,firestore,auth "bash scripts/smoke-emulator.sh"
 set -e
 A=http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1
-F=http://127.0.0.1:5001/demo-scaper/asia-south1
+F=http://127.0.0.1:5001/demo-escapes/asia-south1
 R=$(curl -s -X POST "$A/accounts:signUp?key=fake" -H 'Content-Type: application/json' -d '{"email":"alice@example.com","password":"secret123","returnSecureToken":true}')
 TOK=$(echo "$R" | node -pe 'JSON.parse(require("fs").readFileSync(0)).idToken')
 USERID=$(echo "$R" | node -pe 'JSON.parse(require("fs").readFileSync(0)).localId')

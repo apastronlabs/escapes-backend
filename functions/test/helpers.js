@@ -13,7 +13,7 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { createContext } = require("../src/context");
 const { makeServices } = require("../src/services");
 
-const PROJECT_ID = "demo-scaper";
+const PROJECT_ID = "demo-escapes";
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error("Integration tests need the Firestore emulator. Run `npm test` (firebase emulators:exec).");

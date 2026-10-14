@@ -1,6 +1,6 @@
-# Scaper backend
+# Escapes backend
 
-Firebase backend for Scaper, a multi-trip group expense app (FlutterFlow, Android + iOS)
+Firebase backend for Escapes, a multi-trip group expense app (FlutterFlow, Android + iOS)
 with UPI Intent payments. Cloud Functions v2 · Node.js 22 · JavaScript · Firestore ·
 Firebase Auth · `asia-south1`.
 
@@ -20,7 +20,7 @@ standalone `functions/` codebase meant to be added to your **existing** Firebase
 (no project was initialized and no Firebase config was replaced).
 
 ```
-firebase.json              functions codebase "scaper" + emulator ports (no rules section)
+firebase.json              functions codebase "escapes" + emulator ports (no rules section)
 firestore.indexes.json     composite indexes
 .firebaserc.example        put your existing project id here (copy to .firebaserc)
 functions/
@@ -54,7 +54,7 @@ npm run serve            # Functions + Firestore + Auth + Storage emulators with
 From the repo root, an end-to-end check through real callable HTTP requests with Auth emulator tokens:
 
 ```bash
-npx --prefix functions firebase emulators:exec --project demo-scaper \
+npx --prefix functions firebase emulators:exec --project demo-escapes \
   --only functions,firestore,auth "bash scripts/smoke-emulator.sh"
 ```
 
@@ -66,7 +66,7 @@ Auth/Firestore/Storage calls).
 
 1. Copy this repo's `functions/`, `firebase.json` (or merge its `functions` entry into yours)
    and `firestore.indexes.json` next to your existing Firebase config.
-   The functions use their own codebase, `scaper`, so deploying them **does not touch or
+   The functions use their own codebase, `escapes`, so deploying them **does not touch or
    delete** functions deployed by FlutterFlow or other codebases.
 2. `cp .firebaserc.example .firebaserc` and set your project id (or `firebase use <id>`).
 3. Parameters: `cp functions/.env.example functions/.env.<projectId>` and adjust.
@@ -74,7 +74,7 @@ Auth/Firestore/Storage calls).
    (`firebase functions:secrets:set NAME`) and are declared with `defineSecret()`.
 4. Deploy:
    ```bash
-   firebase deploy --only functions:scaper
+   firebase deploy --only functions:escapes
    firebase deploy --only firestore:indexes   # merge with FlutterFlow-managed indexes first, see docs/SCHEMA.md
    ```
 5. One-time, optional: TTL policy on `idempotencyKeys.expireAt` (command in docs/SCHEMA.md).

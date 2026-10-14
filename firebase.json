@@ -2,7 +2,7 @@
   "functions": [
     {
       "source": "functions",
-      "codebase": "scaper",
+      "codebase": "escapes",
       "runtime": "nodejs22",
       "ignore": ["node_modules", ".git", "test", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
     }
