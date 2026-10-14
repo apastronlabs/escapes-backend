@@ -36,7 +36,7 @@ functions/
   test/integration/        service tests against the Firestore emulator
   .env.example
 scripts/smoke-emulator.sh  end-to-end call through the Functions + Auth emulators
-docs/                      SCHEMA, FUNCTIONS, PAYMENTS, VERIFICATION, SPLITTING
+docs/                      FLUTTERFLOW_GUIDE, SCHEMA, FUNCTIONS, PAYMENTS, VERIFICATION, SPLITTING
 ```
 
 ## Run locally
@@ -127,6 +127,7 @@ unverified, ₹0 confirmed).
 
 ## Docs
 
+* [docs/FLUTTERFLOW_GUIDE.md](docs/FLUTTERFLOW_GUIDE.md): how to wire the FlutterFlow app, screen by screen
 * [docs/FUNCTIONS.md](docs/FUNCTIONS.md): every function's purpose, inputs, outputs, authorization
 * [docs/SCHEMA.md](docs/SCHEMA.md): collections, fields, indexes
 * [docs/PAYMENTS.md](docs/PAYMENTS.md): UPI flow, state machine, Android/iOS callback handling, reconciliation
