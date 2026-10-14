@@ -31,7 +31,10 @@ let cached = null;
 function createDefaultContext() {
   if (cached) return cached;
   const { getApps, initializeApp } = require("firebase-admin/app");
-  if (!getApps().length) initializeApp();
+  // Check for the default app by name: on Cloud Functions, firebase-functions creates its own
+  // named app ("__FIREBASE_FUNCTIONS_SDK__") to verify callable auth tokens before our
+  // handler runs, so getApps() is not empty even though the default app doesn't exist.
+  if (!getApps().some((app) => app.name === "[DEFAULT]")) initializeApp();
   const { getStorage } = require("firebase-admin/storage");
   const params = require("./config");
   let bucket = null;

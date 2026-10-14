@@ -27,3 +27,20 @@ test("the trusted adapter entry point is not exported as a callable", () => {
   const exported = require("../../index.js");
   assert.equal(exported.applyAdapterResult, undefined);
 });
+
+test("the default context initializes the default app even when firebase-functions created its own app first", () => {
+  // Runs in a fresh process: on Cloud Functions, firebase-functions initializes a named app to
+  // verify callable auth tokens before any handler runs.
+  const { execFileSync } = require("node:child_process");
+  const script = `
+    const { initializeApp } = require("firebase-admin/app");
+    initializeApp({ projectId: "demo-test" }, "__FIREBASE_FUNCTIONS_SDK__");
+    const ctx = require("./src/context").createDefaultContext();
+    if (!ctx.db) throw new Error("no db");
+  `;
+  execFileSync(process.execPath, ["-e", script], {
+    cwd: require("node:path").join(__dirname, "../.."),
+    env: { ...process.env, GCLOUD_PROJECT: "demo-test" },
+    stdio: "pipe",
+  });
+});
