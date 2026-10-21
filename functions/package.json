@@ -1,0 +1,25 @@
+{
+  "name": "escapes-functions",
+  "version": "1.0.0",
+  "description": "Escapes multi-trip expense backend (Firebase Cloud Functions v2)",
+  "main": "index.js",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "firebase emulators:exec --project demo-escapes --only firestore \"node --test --test-concurrency=1 'test/**/*.test.js'\"",
+    "test:unit": "node --test 'test/unit/**/*.test.js'",
+    "serve": "firebase emulators:start --only functions,firestore,auth,storage",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "test:integration": "firebase emulators:exec --project demo-escapes --only firestore \"node --test --test-concurrency=1 'test/integration/**/*.test.js'\""
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.33.0"
+  }
+}
