@@ -20,6 +20,7 @@ const COLLECTIONS = Object.freeze({
   IDEMPOTENCY_KEYS: "idempotencyKeys",
   PAYMENT_REFERENCE_CLAIMS: "paymentReferenceClaims",
   RECEIPTS: "receipts",
+  EXPENSE_OPS: "expenseOps",
 });
 
 /** Subcollection under transactions/{id} holding every raw client report. */

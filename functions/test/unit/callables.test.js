@@ -20,7 +20,10 @@ test("index exports authenticated v2 callables in asia-south1 and no HTTP endpoi
     assert.deepEqual(fn.__endpoint.region, ["asia-south1"]);
     assert.equal(fn.__endpoint.platform, "gcfv2");
   }
-  assert.equal(Object.keys(exported).length, CALLABLES.length);
+  // The callables plus the offline-sync Firestore trigger.
+  assert.deepEqual(Object.keys(exported).filter((k) => !CALLABLES.includes(k)), ["processExpenseOp"]);
+  assert.equal(exported.processExpenseOp.__endpoint.eventTrigger.eventFilterPathPatterns.document, "expenseOps/{opId}");
+  assert.deepEqual(exported.processExpenseOp.__endpoint.region, ["asia-south1"]);
 });
 
 test("the trusted adapter entry point is not exported as a callable", () => {

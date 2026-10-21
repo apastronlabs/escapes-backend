@@ -2,7 +2,7 @@
 
 This guide is for whoever (person or agent) wires the Escapes FlutterFlow app to its backend.
 Part 1 covers the rules that apply to every call, Part 2 maps screens to function calls, and
-Part 3 is the full reference of all 42 functions.
+Part 3 is the full reference of all 43 functions.
 
 ---
 
@@ -18,17 +18,44 @@ Part 3 is the full reference of all 42 functions.
 * Every function requires a signed-in Firebase Auth user. Call them only after login.
 * Function names are case-sensitive and exactly as listed in Part 3 (for example `createTrip`).
 
-### The app reads Firestore directly, and writes only through functions
+### The app reads Firestore directly, and writes only through functions (or the offline queue)
 
-* **Reads:** for lists that should update live (trips, expenses, transactions, members),
-  you may use Firestore queries filtered by `tripId`. The `list*` and `get*` functions
-  return the same data and check membership for you.
+* **Reads:** read trips, expenses, members, transactions and settlements with Firestore
+  queries filtered by `tripId`. Firestore caches them, so these screens keep working offline.
+  The `list*` and `get*` functions return the same data but need a connection.
+* **Offline expense changes:** adding, editing and voiding expenses goes through the
+  `expenseOps` queue (see "Working offline" below), which works with or without a connection.
+  That is the **only** collection the app writes to.
 * **Writes:** never create, update or delete documents in these collections from the app:
   `trips`, `tripMemberships`, `invitations`, `categories`, `transactions`, `expenses`,
   `expenseSplits`, `settlements`, `reconciliationRecords`, `receipts`,
   `paymentReferenceClaims`, `idempotencyKeys`, `auditLogs`. Every change goes through
   a function, which also writes the audit log.
 * The `users` collection stays FlutterFlow's. The backend only reads `display_name` from it.
+
+### Working offline
+
+Mountains and highways often have no signal, so expenses must work offline.
+Full details and the Security Rules to add are in `docs/OFFLINE.md`. In short:
+
+* To add, edit or void an expense, **create a document in `expenseOps`** with FlutterFlow's
+  Create Document action, instead of calling `createExpense` / `updateExpense` / `voidExpense`.
+  Firestore keeps it on the phone while offline and sends it automatically when the
+  connection returns; the server applies it and writes the outcome back onto the document.
+* Fields: doc id and `opId` = the same new UUID; `uid` = current user; `tripId`;
+  `type` (`CREATE_EXPENSE` / `UPDATE_EXPENSE` / `VOID_EXPENSE`); `expenseId` (for a create,
+  a **new UUID you generate**, so the expense can be opened and edited before it syncs);
+  `payload` (the same fields as the callable, without `tripId`, `expenseId`, `idempotencyKey`);
+  `clientCreatedAt` = now; `status` = `"PENDING"`.
+* Show ops with status `PENDING` or `DEFERRED` as "Waiting to sync" in the expense list.
+  `APPLIED` means saved. `REJECTED` means the server refused it: show `error.message` and
+  let the user fix it (for `VERSION_CONFLICT`, someone else changed the expense first; reload it
+  and redo the edit).
+* **Sync log screen:** query `expenseOps` where `uid == currentUser` (optionally
+  `tripId == X`), ordered by `clientCreatedAt` descending. Each entry shows the trip
+  (`tripName`, or your trip list's name for `tripId` while it's pending), the expense title
+  (`payload.title`), when it was made, and its status. Online, `listSyncLog` returns the same list.
+* UPI payments, invitations, settlements and balances still need a connection.
 
 ### Money
 
@@ -146,17 +173,21 @@ Expenses without a UPI payment (cash or card) show `verificationStatus: MEMBER_R
 
 ### Expenses (cash, card, or anything not paid through UPI in the app)
 
-* **Expense list (on load / scroll):** `listExpenses`, passing `nextCursor` back as `cursor`
-  for the next page. Optional `categoryId` filter.
-* **Expense detail:** `getExpense`.
-* **Add expense (on Save):** `createExpense` 🔁 with `title`, `amountMinor`, `participantUids`, and optionally
+Use the offline queue (`expenseOps`, see "Working offline") for add, edit and void, so they work
+without signal. The callables below take the same fields and are fine for online-only screens.
+
+* **Expense list:** query `expenses` where `tripId == X` ordered by `expenseDate` desc (works
+  offline), plus pending `expenseOps` for this trip. Online alternative: `listExpenses`, passing
+  `nextCursor` back as `cursor` for the next page.
+* **Expense detail:** read `expenses/{expenseId}` (works offline), or `getExpense`.
+* **Add expense (on Save):** an `expenseOps` doc with type `CREATE_EXPENSE`, or `createExpense` 🔁 with `title`, `amountMinor`, `participantUids`, and optionally
   `split`, `paidByUid` (admins only, for someone else), `categoryId`, `notes`, `expenseDate` (a timestamp; omit it to use "now"), `receiptIds`.
   * Equal split: omit `split`.
   * Exact amounts: `split: {type: "AMOUNT", values: {uid1: 30000, uid2: 20000}}`. The values must add up to `amountMinor`.
   * Percentages: `split: {type: "PERCENTAGE", values: {uid1: 6000, uid2: 4000}}`. The values must add up to 10000.
-* **Edit expense:** `updateExpense` with `expectedVersion`. Amount and payer can only change on
+* **Edit expense:** an `UPDATE_EXPENSE` op, or `updateExpense`, with `expectedVersion` (the `version` shown). Amount and payer can only change on
   unconfirmed cash/card expenses.
-* **Delete expense:** `voidExpense` with a `reason`. It is kept and marked VOIDED; confirmed expenses can't be voided.
+* **Delete expense:** a `VOID_EXPENSE` op, or `voidExpense`, with `expectedVersion` and a `reason`. It is kept and marked VOIDED; confirmed expenses can't be voided.
 * **Admin review of a cash/card expense:** `reviewExpense`. The reviewer must be an admin who
   didn't pay or create the expense.
 
@@ -221,12 +252,14 @@ and decides when it counts as confirmed.
 ### Activity log
 
 * **Trip activity screen:** `listAuditLogs` (optionally `entityId` to show the history of one expense or payment).
+  Entries made offline have `metadata.source == "OFFLINE_SYNC"` and `metadata.clientAt` (when it was made on the phone).
+* **My sync log:** see "Working offline" above.
 
 ### Things the app must never do
 
 * Ask for, read or store a UPI PIN, OTP or card details. No function accepts them.
 * Show a payment as "Paid" or "Verified" unless its `status` is `CONFIRMED`.
-* Write to the backend's Firestore collections directly.
+* Write to the backend's Firestore collections directly (the only exception is creating `expenseOps` docs).
 * Retry a 🔁 call with a new idempotency key (that can create duplicates).
 
 ---
@@ -234,7 +267,7 @@ and decides when it counts as confirmed.
 ## Part 3. Function reference
 
 
-All 42 functions are **Firebase callable functions (v2)** in `asia-south1` (Mumbai). Call them
+All 43 functions are **Firebase callable functions (v2)** in `asia-south1` (Mumbai). Call them
 from FlutterFlow with a Cloud Function action, or in Flutter with
 `FirebaseFunctions.instanceFor(region: 'asia-south1').httpsCallable(name)`.
 The region must be set on the client; the default instance calls us-central1.
@@ -342,7 +375,17 @@ Roles: **O** = OWNER, **A** = ADMIN, **M** = MEMBER.
 
 Every write path appends an `auditLogs` entry in the same Firestore transaction as the change.
 
+### Offline sync
+
+| Function | Who | Input | Output |
+|---|---|---|---|
+| `listSyncLog` | any signed-in user | `tripId?`, `pageSize?` (≤ 100) | `{ entries }`: the caller's offline changes, newest first, with `tripId`, `tripName`, `type`, `expenseId`, `title`, `status`, `error`, `clientCreatedAt`, `processedAt`. Offline, read the `expenseOps` collection instead. |
+
+`processExpenseOp` is a Firestore trigger on `expenseOps/{opId}`, not a callable: it applies
+expense changes the app queued while offline. See [OFFLINE.md](OFFLINE.md).
+
 ### Not exposed
 
 * `applyAdapterResult` (trusted verification entry point) is server-only.
 * No HTTP (`onRequest`) endpoints exist, because no provider webhook is integrated.
+* `processExpenseOp` (offline sync) runs on Firestore writes to `expenseOps`; it can't be called.

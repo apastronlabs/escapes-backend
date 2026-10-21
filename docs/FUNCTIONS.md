@@ -1,6 +1,6 @@
 # Cloud Functions reference
 
-All 42 functions are **Firebase callable functions (v2)** in `asia-south1` (Mumbai). Call them
+All 43 functions are **Firebase callable functions (v2)** in `asia-south1` (Mumbai). Call them
 from FlutterFlow with a Cloud Function action, or in Flutter with
 `FirebaseFunctions.instanceFor(region: 'asia-south1').httpsCallable(name)`.
 The region must be set on the client; the default instance calls us-central1.
@@ -108,7 +108,17 @@ Roles: **O** = OWNER, **A** = ADMIN, **M** = MEMBER.
 
 Every write path appends an `auditLogs` entry in the same Firestore transaction as the change.
 
+## Offline sync
+
+| Function | Who | Input | Output |
+|---|---|---|---|
+| `listSyncLog` | any signed-in user | `tripId?`, `pageSize?` (≤ 100) | `{ entries }`: the caller's offline changes, newest first, with `tripId`, `tripName`, `type`, `expenseId`, `title`, `status`, `error`, `clientCreatedAt`, `processedAt`. Offline, read the `expenseOps` collection instead. |
+
+`processExpenseOp` is a Firestore trigger on `expenseOps/{opId}`, not a callable: it applies
+expense changes the app queued while offline. See [OFFLINE.md](OFFLINE.md).
+
 ## Not exposed
 
 * `applyAdapterResult` (trusted verification entry point) is server-only.
 * No HTTP (`onRequest`) endpoints exist, because no provider webhook is integrated.
+* `processExpenseOp` (offline sync) runs on Firestore writes to `expenseOps`; it can't be called.

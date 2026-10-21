@@ -150,7 +150,7 @@ async function prepareExpenseCreate(ctx, tx, { uid, membership, trip, tripId, in
   return { tripId, uid, paidByUid, amountMinor, currency, verificationStatus, categoryId, categorySource, shares, input, transaction };
 }
 
-function commitExpenseCreate(ctx, tx, plan, { expenseRef, kind = EXPENSE_KINDS.STANDARD, adjustsExpenseId = null, transactionId = null } = {}) {
+function commitExpenseCreate(ctx, tx, plan, { expenseRef, kind = EXPENSE_KINDS.STANDARD, adjustsExpenseId = null, transactionId = null, sync = null } = {}) {
   const { FieldValue } = ctx;
   const ref = expenseRef || ctx.db.collection(COLLECTIONS.EXPENSES).doc();
   const expense = {
@@ -178,6 +178,8 @@ function commitExpenseCreate(ctx, tx, plan, { expenseRef, kind = EXPENSE_KINDS.S
     verificationSource: plan.transaction ? "TRANSACTION" : "MEMBER_REPORTED",
     status: "ACTIVE",
     version: 1,
+    lastEditedByUid: plan.uid,
+    lastSyncOpId: sync ? sync.opId : null,
     schemaVersion: SCHEMA_VERSION,
   };
   tx.set(ref, { ...expense, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
@@ -189,8 +191,18 @@ function commitExpenseCreate(ctx, tx, plan, { expenseRef, kind = EXPENSE_KINDS.S
     entityType: "expense",
     entityId: ref.id,
     changes: { amountMinor: expense.amountMinor, paidByUid: expense.paidByUid, participantUids: expense.participantUids, split: expense.split, transactionId },
+    metadata: syncAuditMetadata(sync),
   });
   return expense;
+}
+
+/**
+ * Offline changes arrive through the sync queue (services/sync.js), which calls these
+ * handlers with `request.sync = { opId, clientAt }`. Clients can't set it: callable
+ * requests are built by firebase-functions, and `sync` is not a data field.
+ */
+function syncAuditMetadata(sync) {
+  return sync ? { source: "OFFLINE_SYNC", opId: sync.opId, clientAt: new Date(sync.clientAt).toISOString() } : null;
 }
 
 /**
@@ -228,15 +240,23 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
   async function createExpense(request) {
     const uid = requireAuth(request);
     const data = v.requireObject(request.data);
-    v.onlyKeys(data, ["tripId", "title", "merchantName", "amountMinor", "currency", "categoryId", "paidByUid", "participantUids", "split", "notes", "expenseDate", "receiptIds", "transactionId", "idempotencyKey"]);
+    v.onlyKeys(data, ["tripId", "expenseId", "title", "merchantName", "amountMinor", "currency", "categoryId", "paidByUid", "participantUids", "split", "notes", "expenseDate", "receiptIds", "transactionId", "idempotencyKey"]);
+    const sync = request.sync || null;
     const tripId = v.id(data, "tripId");
+    // Optional client-generated id, so an expense created offline can be edited before it syncs.
+    const clientExpenseId = v.id(data, "expenseId", { required: false });
     const transactionId = v.id(data, "transactionId", { required: false });
     const input = parseExpenseInput(data, { requireAmount: !transactionId });
+    if (input.expenseDate === null && sync) input.expenseDate = sync.clientAt; // offline: when the user entered it
     const key = v.idempotencyKey(data);
-    const payload = { ...input, tripId, transactionId };
+    const payload = { ...input, tripId, transactionId, clientExpenseId };
 
     return runIdempotent(ctx, { uid, operation: "createExpense", key, payload }, async (tx) => {
       const { trip, membership } = await loadMemberContext(ctx, tx, tripId, uid);
+      const expenseRef = clientExpenseId ? expenses().doc(clientExpenseId) : null;
+      if (expenseRef && (await tx.get(expenseRef)).exists) {
+        throw precondition("An expense with this id already exists.", "EXPENSE_ID_TAKEN");
+      }
       let transaction = null;
       let txnRef = null;
       if (transactionId) {
@@ -256,21 +276,28 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
         uid, membership, trip, tripId, input, transaction, categorizer,
         categoryInput: transaction ? { merchantCategoryCode: transaction.payee && transaction.payee.merchantCategoryCode } : null,
       });
-      const expense = commitExpenseCreate(ctx, tx, plan, { transactionId });
+      const expense = commitExpenseCreate(ctx, tx, plan, { transactionId, expenseRef, sync });
       if (txnRef) tx.update(txnRef, { expenseId: expense.expenseId, categoryId: expense.categoryId, updatedAt: FieldValue.serverTimestamp() });
       return { expenseId: expense.expenseId, verificationStatus: expense.verificationStatus, shares: expense.shares, categoryId: expense.categoryId };
     });
   }
 
-  async function loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion) {
+  /**
+   * `sync` (offline changes only): an edit made against an older version is still applied
+   * when every later change was the same user's own (their earlier offline edits); a change
+   * by anyone else in between is a VERSION_CONFLICT. Returns `alreadyApplied` on replays.
+   */
+  async function loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion, sync = null) {
     const ctxMember = await loadMemberContext(ctx, tx, tripId, uid);
     const snap = await tx.get(expenses().doc(expenseId));
     if (!snap.exists || snap.data().tripId !== tripId) throw notFound("Expense not found.", "EXPENSE_NOT_FOUND");
     const expense = snap.data();
+    if (sync && expense.lastSyncOpId === sync.opId) return { ...ctxMember, expense, ref: snap.ref, alreadyApplied: true };
     if (expense.status === "VOIDED") throw precondition("This expense has been voided.", "EXPENSE_VOIDED");
     const canEdit = expense.createdByUid === uid || expense.paidByUid === uid || isManager(ctxMember.membership);
     if (!canEdit) throw denied("Only the creator, the payer or a trip admin can edit this expense.", "CANNOT_EDIT_EXPENSE");
-    if (expectedVersion !== expense.version) {
+    const ownLaterEdits = sync && expectedVersion < expense.version && expense.lastEditedByUid === uid;
+    if (expectedVersion !== expense.version && !ownLaterEdits) {
       throw precondition("This expense was changed by someone else. Reload and try again.", "VERSION_CONFLICT", { currentVersion: expense.version });
     }
     return { ...ctxMember, expense, ref: snap.ref };
@@ -283,6 +310,7 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
    */
   async function updateExpense(request) {
     const uid = requireAuth(request);
+    const sync = request.sync || null;
     const data = v.requireObject(request.data);
     v.onlyKeys(data, ["tripId", "expenseId", "expectedVersion", "title", "merchantName", "categoryId", "notes", "expenseDate", "receiptIds", "participantUids", "split", "amountMinor", "paidByUid"]);
     const tripId = v.id(data, "tripId");
@@ -308,7 +336,8 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
     }
 
     return db.runTransaction(async (tx) => {
-      const { expense, ref, membership } = await loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion);
+      const { expense, ref, membership, alreadyApplied } = await loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion, sync);
+      if (alreadyApplied) return { expenseId, version: expense.version, shares: expense.shares };
       const moneyChange = (newAmount !== null && newAmount !== expense.amountMinor) || (newPayer && newPayer !== expense.paidByUid);
       if (moneyChange) {
         if (expense.transactionId || expense.verificationStatus !== EXPENSE_VERIFICATION.MEMBER_REPORTED) {
@@ -354,11 +383,11 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
 
       const fields = ["title", "merchantName", "categoryId", "categorySource", "notes", "expenseDate", "receiptIds", "participantUids", "split", "shares", "amountMinor", "paidByUid"];
       const changes = diff(expense, next, fields);
-      const write = { version: next.version, updatedAt: FieldValue.serverTimestamp() };
+      const write = { version: next.version, lastEditedByUid: uid, lastSyncOpId: sync ? sync.opId : null, updatedAt: FieldValue.serverTimestamp() };
       for (const f of Object.keys(changes)) write[f] = next[f];
       tx.update(ref, write);
       if (shareChange || newPayer) writeSplitDocs(ctx, tx, next, expense.participantUids);
-      writeAudit(ctx, tx, { tripId, actorUid: uid, action: "EXPENSE_UPDATED", entityType: "expense", entityId: expenseId, changes });
+      writeAudit(ctx, tx, { tripId, actorUid: uid, action: "EXPENSE_UPDATED", entityType: "expense", entityId: expenseId, changes, metadata: syncAuditMetadata(sync) });
       return { expenseId, version: next.version, shares: next.shares };
     });
   }
@@ -368,12 +397,14 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
     const uid = requireAuth(request);
     const data = v.requireObject(request.data);
     v.onlyKeys(data, ["tripId", "expenseId", "expectedVersion", "reason"]);
+    const sync = request.sync || null;
     const tripId = v.id(data, "tripId");
     const expenseId = v.id(data, "expenseId");
     const expectedVersion = v.integer(data, "expectedVersion", { min: 1 });
     const reason = v.string(data, "reason", { max: 300 });
     return db.runTransaction(async (tx) => {
-      const { expense, ref } = await loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion);
+      const { expense, ref, alreadyApplied } = await loadExpenseForEdit(tx, tripId, expenseId, uid, expectedVersion, sync);
+      if (alreadyApplied) return { expenseId, status: expense.status, version: expense.version };
       if (VERIFIED_STATES.includes(expense.verificationStatus)) {
         throw precondition("Confirmed expenses cannot be voided. Record a refund or adjustment instead.", "CONFIRMED_IMMUTABLE");
       }
@@ -384,11 +415,11 @@ function makeExpenseService(ctx, { categorizer = createDeterministicCategorizer(
         await tx.get(txnRef);
       }
       const next = { ...expense, status: "VOIDED", version: expense.version + 1 };
-      tx.update(ref, { status: "VOIDED", voidReason: reason, voidedByUid: uid, version: next.version, updatedAt: FieldValue.serverTimestamp() });
+      tx.update(ref, { status: "VOIDED", voidReason: reason, voidedByUid: uid, version: next.version, lastEditedByUid: uid, lastSyncOpId: sync ? sync.opId : null, updatedAt: FieldValue.serverTimestamp() });
       writeSplitDocs(ctx, tx, next);
       // Unlink so the payment can be attached to a corrected expense.
       if (txnRef) tx.update(txnRef, { expenseId: null, updatedAt: FieldValue.serverTimestamp() });
-      writeAudit(ctx, tx, { tripId, actorUid: uid, action: "EXPENSE_VOIDED", entityType: "expense", entityId: expenseId, changes: { status: { from: "ACTIVE", to: "VOIDED" } }, metadata: { reason } });
+      writeAudit(ctx, tx, { tripId, actorUid: uid, action: "EXPENSE_VOIDED", entityType: "expense", entityId: expenseId, changes: { status: { from: "ACTIVE", to: "VOIDED" } }, metadata: { reason, ...syncAuditMetadata(sync) } });
       return { expenseId, status: "VOIDED", version: next.version };
     });
   }

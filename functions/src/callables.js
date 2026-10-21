@@ -21,6 +21,8 @@ const CALLABLES = [
   "getTripSummary", "recordSettlement", "confirmSettlement", "rejectSettlement", "cancelSettlement", "listSettlements",
   // audit
   "listAuditLogs",
+  // offline sync
+  "listSyncLog",
 ];
 
 module.exports = { CALLABLES };

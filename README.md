@@ -36,7 +36,7 @@ functions/
   test/integration/        service tests against the Firestore emulator
   .env.example
 scripts/smoke-emulator.sh  end-to-end call through the Functions + Auth emulators
-docs/                      FLUTTERFLOW_GUIDE, SCHEMA, FUNCTIONS, PAYMENTS, VERIFICATION, SPLITTING
+docs/                      FLUTTERFLOW_GUIDE, OFFLINE, SCHEMA, FUNCTIONS, PAYMENTS, VERIFICATION, SPLITTING
 ```
 
 ## Run locally
@@ -81,20 +81,23 @@ Auth/Firestore/Storage calls).
    Also one-time: a clean-up policy so old function container images don't accumulate
    Artifact Registry storage charges (keeps images 1 day; running functions are unaffected):
    `firebase functions:artifacts:setpolicy --location asia-south1 --days 1 --force`
-6. Receipts: the app uploads to `receipts/{tripId}/{uid}/{file}` in the default bucket.
+6. Offline expenses: add the `expenseOps` Security Rules from docs/OFFLINE.md in FlutterFlow.
+   Without them the app can't queue offline changes. The `processExpenseOp` trigger needs the
+   Firestore database in the same region as the functions (asia-south1).
+7. Receipts: the app uploads to `receipts/{tripId}/{uid}/{file}` in the default bucket.
    `getReceiptUrl` signs URLs, which needs the functions' service account to have
    `iam.serviceAccounts.signBlob` (Service Account Token Creator on itself).
 
 **Not included, by design:** Firestore/Storage Security Rules (managed in FlutterFlow;
-recommendations in docs/SCHEMA.md), FlutterFlow screens, any AI integration, any payment
+recommendations in docs/SCHEMA.md and the rules offline sync needs in docs/OFFLINE.md), FlutterFlow screens, any AI integration, any payment
 provider integration.
 
 ## Test results
 
-Run on 2026-10-13 with Node 22.22.0, firebase-tools 15.33.0, Firestore emulator 1.22.0:
+Run on 2026-10-21 with Node 22.22.0, firebase-tools 15.33.0, Firestore emulator 1.22.0:
 
 ```
-npm test   ->  # tests 72  # pass 72  # fail 0   (run 3 times, same result)
+npm test   ->  # tests 82  # pass 82  # fail 0   (run 3 times, same result)
 ```
 
 Coverage by requirement:
@@ -107,6 +110,7 @@ Coverage by requirement:
 | Membership changes | `trips-membership`; `expenses` (removed member keeps balance, can't be added) |
 | Status transitions | `unit/paymentStates` (exhaustive "client can never confirm"); `payments` |
 | Concurrent updates | `expenses` (stale edits), `concurrency` (cancel vs reconcile race) |
+| Offline expense changes | `offline-sync`: create with the app's id and device time, edits arriving before their create, repeated offline edits, conflicts with other users, permission and malformed-op rejections, replays, sync log |
 | Unverified UPI response can't confirm | `payments`: "an unverified UPI success response can never produce a confirmed payment" |
 
 The smoke script was also run end to end through the Functions + Auth emulators
@@ -128,6 +132,7 @@ unverified, ₹0 confirmed).
 ## Docs
 
 * [docs/FLUTTERFLOW_GUIDE.md](docs/FLUTTERFLOW_GUIDE.md): how to wire the FlutterFlow app, screen by screen
+* [docs/OFFLINE.md](docs/OFFLINE.md): offline expenses, the sync log, and the Security Rules they need
 * [docs/FUNCTIONS.md](docs/FUNCTIONS.md): every function's purpose, inputs, outputs, authorization
 * [docs/SCHEMA.md](docs/SCHEMA.md): collections, fields, indexes
 * [docs/PAYMENTS.md](docs/PAYMENTS.md): UPI flow, state machine, Android/iOS callback handling, reconciliation

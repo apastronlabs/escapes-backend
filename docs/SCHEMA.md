@@ -6,7 +6,7 @@ the caller's ACTIVE membership of that trip first. Every document has
 `schemaVersion` (currently `1`) and server timestamps (`createdAt`, `updatedAt`).
 
 Clients should treat these collections as **read-only**; all writes go through the
-callables. (Security Rules are managed separately in FlutterFlow and are not part of this
+callables, except `expenseOps`, which the app creates (see [OFFLINE.md](OFFLINE.md)). (Security Rules are managed separately in FlutterFlow and are not part of this
 repo. Recommended: deny client writes to every collection below, and deny client reads
 of `idempotencyKeys`, `paymentReferenceClaims` and `auditLogs`.)
 
@@ -29,6 +29,7 @@ Money: integer paise in `*Minor` fields. Currency: `INR` (trip-level).
 | `paymentReferenceClaims` | sha256(`UTR:` + utr) | Global uniqueness guard for UTR / provider refs |
 | `idempotencyKeys` | sha256(uid:operation:key) | Stored results of idempotent calls |
 | `auditLogs` | auto | Append-only audit trail |
+| `expenseOps` | client UUID | Offline queue of expense changes, written by the app; doubles as the user's sync log ([OFFLINE.md](OFFLINE.md)) |
 
 `webhookEvents` is intentionally absent: no provider webhook is integrated
 (see [VERIFICATION.md](VERIFICATION.md)).
@@ -73,6 +74,7 @@ amountMinor (negative for adjustments), currency, categoryId, categorySource (MA
 paidByUid, createdByUid, participantUids[] (sorted), split { type, values }, shares { uid: paise },
 notes, receiptIds[], expenseDate (Timestamp; defaults to creation time), transactionId, adjustsExpenseId,
 verificationStatus (transaction states | MEMBER_REPORTED), verificationSource, reviewedByUid?, reviewNote?,
+lastEditedByUid, lastSyncOpId (offline-sync bookkeeping),
 status (ACTIVE|VOIDED), voidReason?, voidedByUid?, version
 ```
 
@@ -120,3 +122,5 @@ indexes for this project, merge rather than overwrite: run
   refuses above 5,000 of either (`SUMMARY_TOO_LARGE`). Beyond that, maintain per-member
   aggregates incrementally in the same transactions.
 * Lists are paginated with opaque cursors (`createdAt` + doc id).
+
+**expenseOps**: `opId, uid, tripId, type (CREATE_EXPENSE|UPDATE_EXPENSE|VOID_EXPENSE), expenseId, payload, clientCreatedAt, status (PENDING|PROCESSING|DEFERRED|APPLIED|REJECTED|FAILED), createdAt?` written by the app; `tripName, result, error {code, reason, message}, attempts, claimId, processedAt, updatedAt` written by the server.
