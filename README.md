@@ -20,7 +20,7 @@ standalone `functions/` codebase meant to be added to your **existing** Firebase
 (no project was initialized and no Firebase config was replaced).
 
 ```
-firebase.json              functions codebase "escapes" + emulator ports (no rules section)
+firebase.json              functions codebase "escapes", Firestore indexes, emulator ports (no rules section)
 firestore.indexes.json     composite indexes
 .firebaserc.example        put your existing project id here (copy to .firebaserc)
 functions/
